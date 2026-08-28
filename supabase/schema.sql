@@ -77,10 +77,12 @@ security definer
 set search_path = public
 as $$
 declare
-  imported_count bigint;
+  imported_count bigint := 0;
+  batch_count bigint;
+  batch_size constant integer := 5000;
 begin
-  -- Large CSV imports can exceed the default Postgres statement timeout when
-  -- we truncate the live table and bulk-insert staged rows in one call.
+  -- Large CSV imports can exceed the default Postgres statement timeout when we
+  -- do a single truncate + insert from the staging table to the main table.
   set local statement_timeout = '10min';
   set local lock_timeout = '30s';
 
@@ -100,33 +102,60 @@ begin
 
   truncate table public.enterprises restart identity;
 
-  insert into public.enterprises (
-    source_row,
-    lg_st_code,
-    state,
-    lg_dt_code,
-    district,
-    pincode,
-    registration_date,
-    enterprise_name,
-    communication_address,
-    activities
-  )
-  select
-    source_row,
-    lg_st_code,
-    state,
-    lg_dt_code,
-    district,
-    pincode,
-    registration_date,
-    enterprise_name,
-    communication_address,
-    activities
-  from public.enterprise_import_rows
-  order by source_row;
+  loop
+    with batch as (
+      select source_row,
+             lg_st_code,
+             state,
+             lg_dt_code,
+             district,
+             pincode,
+             registration_date,
+             enterprise_name,
+             communication_address,
+             activities
+      from public.enterprise_import_rows
+      order by source_row
+      limit batch_size
+    )
+    insert into public.enterprises (
+      source_row,
+      lg_st_code,
+      state,
+      lg_dt_code,
+      district,
+      pincode,
+      registration_date,
+      enterprise_name,
+      communication_address,
+      activities
+    )
+    select
+      source_row,
+      lg_st_code,
+      state,
+      lg_dt_code,
+      district,
+      pincode,
+      registration_date,
+      enterprise_name,
+      communication_address,
+      activities
+    from batch;
 
-  get diagnostics imported_count = row_count;
+    get diagnostics batch_count = row_count;
+    exit when batch_count = 0;
+
+    imported_count := imported_count + batch_count;
+
+    delete from public.enterprise_import_rows
+    where source_row in (
+      select source_row
+      from public.enterprise_import_rows
+      order by source_row
+      limit batch_size
+    );
+  end loop;
 
   create unique index if not exists enterprises_source_row_key
     on public.enterprises (source_row);
@@ -152,7 +181,6 @@ begin
   create index if not exists enterprises_activities_trgm_idx
     on public.enterprises using gin (activities gin_trgm_ops);
 
-  truncate table public.enterprise_import_rows;
   return imported_count;
 end;
 $$;

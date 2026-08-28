@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Enterprise Data Explorer</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <h1>Enterprise Data Explorer</h1>
+        <p><span id="recordCount">Loading</span> records</p>
+      </div>
+      <div class="header-actions">
+        <form id="uploadForm" class="upload-form">
+          <label class="file-picker">
+            <span>CSV</span>
+            <input id="csvFile" name="csv" type="file" accept=".csv,text/csv" />
+          </label>
+          <button id="uploadButton" type="submit">Upload CSV</button>
+        </form>
+        <div class="status-pill" id="status">Ready</div>
+      </div>
+    </header>
+
+    <main>
+      <section id="importResult" class="import-result" hidden></section>
+
+      <section class="filters" aria-label="Filters">
+        <label class="wide">
+          <span>Global Search</span>
+          <input id="q" type="search" placeholder="Search enterprise, address, activity..." autocomplete="off" />
+        </label>
+        <label>
+          <span>State</span>
+          <select id="state"><option value="">All states</option></select>
+        </label>
+        <label>
+          <span>District</span>
+          <select id="district"><option value="">All districts</option></select>
+        </label>
+        <label>
+          <span>Pincode</span>
+          <input id="pincode" inputmode="numeric" placeholder="Pincode" />
+        </label>
+        <label>
+          <span>From Date</span>
+          <input id="date_from" type="date" />
+        </label>
+        <label>
+          <span>To Date</span>
+          <input id="date_to" type="date" />
+        </label>
+        <label>
+          <span>LG State Code</span>
+          <input id="lg_st_code" placeholder="Code" />
+        </label>
+        <label>
+          <span>LG District Code</span>
+          <input id="lg_dt_code" placeholder="Code" />
+        </label>
+        <div class="actions">
+          <button id="apply" type="button">Apply Filters</button>
+          <button id="reset" type="button" class="secondary">Reset Filters</button>
+        </div>
+      </section>
+
+      <section class="table-shell" aria-label="Enterprise records">
+        <div class="table-meta">
+          <div id="resultSummary">Loading records</div>
+          <div class="page-size">
+            <span>Rows</span>
+            <select id="perPage">
+              <option>25</option>
+              <option selected>50</option>
+              <option>100</option>
+            </select>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th data-sort="lg_st_code">LG ST Code</th>
+                <th data-sort="state">State</th>
+                <th data-sort="lg_dt_code">LG DT Code</th>
+                <th data-sort="district">District</th>
+                <th data-sort="pincode">Pincode</th>
+                <th data-sort="registration_date">Registration Date</th>
+                <th data-sort="enterprise_name">Enterprise Name</th>
+                <th>Communication Address</th>
+                <th>Activities</th>
+              </tr>
+            </thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+        <div id="empty" class="empty" hidden>No matching records found.</div>
+        <nav class="pager" aria-label="Pagination">
+          <button id="prev" type="button" class="secondary">Previous</button>
+          <span id="pageInfo">Page 1 of 1</span>
+          <button id="next" type="button" class="secondary">Next</button>
+        </nav>
+      </section>
+    </main>
+
+    <dialog id="detailDialog">
+      <form method="dialog">
+        <button class="close" aria-label="Close">&times;</button>
+      </form>
+      <div id="detail"></div>
+    </dialog>
+
+    <script src="/app.js" defer></script>
+  </body>
+</html>

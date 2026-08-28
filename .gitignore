@@ -1,0 +1,4 @@
+data/enterprise.db
+__pycache__/
+*.pyc
+.~lock.*

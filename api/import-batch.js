@@ -1,7 +1,6 @@
 const { requirePost, sendJson, supabaseFetch } = require("./_supabase");
 
 const MAX_ROWS_PER_BATCH = 1000;
-const TEST_ROW_LIMIT = 1000;
 
 async function handler(req, res) {
   if (!requirePost(req, res)) return;
@@ -13,10 +12,6 @@ async function handler(req, res) {
   }
   if (rows.length > MAX_ROWS_PER_BATCH) {
     sendJson(res, 413, { error: `Batch is too large. Maximum is ${MAX_ROWS_PER_BATCH} rows.` });
-    return;
-  }
-  if (rows.length >= TEST_ROW_LIMIT && rows[rows.length - 1].source_row > TEST_ROW_LIMIT) {
-    sendJson(res, 400, { error: `Test mode enabled: only ${TEST_ROW_LIMIT} rows are allowed per import.` });
     return;
   }
 

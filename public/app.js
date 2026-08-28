@@ -32,7 +32,6 @@ const csvColumns = [
 ];
 
 const importBatchSize = 1000;
-const MAX_TEST_ROWS = 1000;
 
 const $ = (id) => document.getElementById(id);
 const rowsEl = $("rows");
@@ -237,13 +236,12 @@ async function importCsvFile(file) {
   let uploadedRows = 0;
   let unparsedDates = 0;
   let batch = [];
-  const maxRowsToImport = Math.min(estimatedRows, MAX_TEST_ROWS);
 
   async function flushBatch() {
     if (!batch.length) return;
     const data = await postJson("/api/import-batch", { rows: batch });
     uploadedRows += data.inserted || batch.length;
-    showImportProgress(uploadedRows, maxRowsToImport || sourceRow, file.name);
+    showImportProgress(uploadedRows, estimatedRows || sourceRow, file.name);
     batch = [];
   }
 
@@ -252,9 +250,6 @@ async function importCsvFile(file) {
     if (!headerRead) {
       validateCsvHeader(rawRow);
       headerRead = true;
-      return;
-    }
-    if (sourceRow >= MAX_TEST_ROWS) {
       return;
     }
     sourceRow += 1;
@@ -316,7 +311,7 @@ async function importCsvFile(file) {
     csvRowsRead: sourceRow,
     rowsInDatabase: completed.rowsInDatabase,
     unparsedRegistrationDates: unparsedDates,
-    estimatedRows: maxRowsToImport,
+    estimatedRows,
   };
 }
 

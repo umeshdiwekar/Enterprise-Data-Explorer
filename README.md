@@ -1,8 +1,27 @@
 # Enterprise Data Explorer
 
-A fast local CSV explorer for `indore.csv`. The browser never receives the full dataset; it asks the local server for the current page only, while SQLite handles filtering, sorting, counting, and text search.
+A fast CSV explorer for `indore.csv`. The browser never receives the full dataset for browsing; it asks the API for the current page only, while the database handles filtering, sorting, counting, and search.
 
-## Run
+You can also replace the dataset from the browser with the CSV uploader in the header. Uploaded CSVs are validated against the required header, imported in small batches, and then the table refreshes automatically.
+
+## Vercel + Supabase Deployment
+
+Use this path for the free production-style deployment:
+
+1. Create a Supabase project.
+2. Open the Supabase SQL editor and run [supabase/schema.sql](supabase/schema.sql).
+3. In Vercel, add these environment variables:
+   - `SUPABASE_URL`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+4. Redeploy the Vercel project.
+
+The deployed API routes live in `api/`. CSV import is chunked in the browser to avoid sending one large 50 MB request to Vercel.
+
+Keep `SUPABASE_SERVICE_ROLE_KEY` only in Vercel environment variables. Do not expose it in frontend JavaScript.
+
+## Local Development
+
+The original local fallback still works with SQLite:
 
 ```bash
 npm run import-data
@@ -11,7 +30,7 @@ npm run dev
 
 Open `http://127.0.0.1:3000`.
 
-You can also replace the dataset from the browser with the CSV uploader in the header. Uploaded CSVs are validated against the required header, imported into SQLite, and then the table refreshes automatically.
+That local Python server is useful for offline testing, but Vercel production uses the `api/` routes and Supabase.
 
 ## Architecture
 

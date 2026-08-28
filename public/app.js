@@ -19,6 +19,20 @@ const fields = [
   "lg_dt_code",
 ];
 
+const csvColumns = [
+  "LG_ST_Code",
+  "State",
+  "LG_DT_Code",
+  "District",
+  "Pincode",
+  "RegistrationDate",
+  "EnterpriseName",
+  "CommunicationAddress",
+  "Activities",
+];
+
+const importBatchSize = 250;
+
 const $ = (id) => document.getElementById(id);
 const rowsEl = $("rows");
 const statusEl = $("status");
@@ -76,6 +90,40 @@ function formatDate(value) {
   return `${day}/${month}/${year}`;
 }
 
+function cleanText(value) {
+  const text = String(value ?? "").trim();
+  return text || null;
+}
+
+function cleanCode(value) {
+  const text = cleanText(value);
+  if (!text) return null;
+  return text.endsWith(".0") ? text.slice(0, -2) : text;
+}
+
+function cleanPincode(value) {
+  const text = cleanCode(value);
+  if (!text) return null;
+  const digits = text.replace(/\D/g, "");
+  return digits || text;
+}
+
+function parseRegistrationDate(value) {
+  const text = cleanText(value);
+  if (!text) return null;
+  const slash = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (slash) {
+    const [, day, month, year] = slash;
+    return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+  }
+  const dash = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (dash) {
+    const [, year, month, day] = dash;
+    return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+  }
+  return null;
+}
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -87,6 +135,136 @@ function escapeHtml(value) {
 function cell(value, className = "") {
   const text = escapeHtml(value || "");
   return `<td title="${text}"><div class="${className}">${text}</div></td>`;
+}
+
+function normalizeCsvRow(row, sourceRow) {
+  return {
+    source_row: sourceRow,
+    lg_st_code: cleanCode(row[0]),
+    state: cleanText(row[1]),
+    lg_dt_code: cleanCode(row[2]),
+    district: cleanText(row[3]),
+    pincode: cleanPincode(row[4]),
+    registration_date: parseRegistrationDate(row[5]),
+    enterprise_name: cleanText(row[6]),
+    communication_address: cleanText(row[7]),
+    activities: cleanText(row[8]),
+  };
+}
+
+function validateCsvHeader(row) {
+  const found = row.map((value) => String(value || "").trim());
+  const matches =
+    found.length === csvColumns.length &&
+    csvColumns.every((column, index) => found[index] === column);
+  if (!matches) {
+    throw new Error(`CSV header mismatch. Expected: ${csvColumns.join(", ")}`);
+  }
+}
+
+async function postJson(url, payload) {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+  const data = await readJson(response);
+  if (!response.ok) throw new Error(data.error || "Request failed");
+  return data;
+}
+
+async function importCsvFile(file) {
+  await postJson("/api/import", {});
+
+  const decoder = new TextDecoder();
+  const reader = file.stream().getReader();
+  let field = "";
+  let row = [];
+  let inQuotes = false;
+  let pendingQuote = false;
+  let headerRead = false;
+  let sourceRow = 0;
+  let uploadedRows = 0;
+  let unparsedDates = 0;
+  let batch = [];
+
+  async function flushBatch() {
+    if (!batch.length) return;
+    const data = await postJson("/api/import-batch", { rows: batch });
+    uploadedRows += data.inserted || batch.length;
+    showImportResult(`Imported ${formatNumber(uploadedRows)} rows from ${file.name}.`);
+    batch = [];
+  }
+
+  async function acceptRow(rawRow) {
+    if (rawRow.length === 1 && rawRow[0] === "") return;
+    if (!headerRead) {
+      validateCsvHeader(rawRow);
+      headerRead = true;
+      return;
+    }
+    sourceRow += 1;
+    const normalized = normalizeCsvRow(rawRow, sourceRow);
+    if (rawRow[5] && !normalized.registration_date) unparsedDates += 1;
+    batch.push(normalized);
+    if (batch.length >= importBatchSize) await flushBatch();
+  }
+
+  async function pushFieldAndRow() {
+    row.push(field);
+    field = "";
+    const completeRow = row;
+    row = [];
+    await acceptRow(completeRow);
+  }
+
+  while (true) {
+    const { done, value } = await reader.read();
+    const chunk = decoder.decode(value || new Uint8Array(), { stream: !done });
+    for (let index = 0; index < chunk.length; index += 1) {
+      const char = chunk[index];
+      const next = chunk[index + 1];
+      if (pendingQuote) {
+        pendingQuote = false;
+        if (char === '"') {
+          field += '"';
+          continue;
+        }
+        inQuotes = false;
+      }
+      if (char === '"') {
+        if (inQuotes && next === '"') {
+          field += '"';
+          index += 1;
+        } else if (inQuotes && index === chunk.length - 1 && !done) {
+          pendingQuote = true;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (char === "," && !inQuotes) {
+        row.push(field);
+        field = "";
+      } else if ((char === "\n" || char === "\r") && !inQuotes) {
+        if (char === "\r" && next === "\n") index += 1;
+        await pushFieldAndRow();
+      } else {
+        field += char;
+      }
+    }
+    if (done) break;
+  }
+
+  if (field || row.length) await pushFieldAndRow();
+  await flushBatch();
+  const completed = await postJson("/api/import-complete", {});
+
+  return {
+    csvRowsRead: sourceRow,
+    rowsInDatabase: completed.rowsInDatabase,
+    unparsedRegistrationDates: unparsedDates,
+  };
 }
 
 function renderSkeleton() {
@@ -224,26 +402,18 @@ $("uploadForm").addEventListener("submit", async (event) => {
     return;
   }
 
-  const body = new FormData();
-  body.append("csv", file);
   $("uploadButton").disabled = true;
   setStatus("Importing");
-  showImportResult(`Importing ${file.name}. Large files can take a moment.`);
+  showImportResult(`Preparing ${file.name} for import.`);
 
   try {
-    const response = await fetch("/api/import", {
-      method: "POST",
-      body,
-    });
-    const data = await readJson(response);
-    if (!response.ok) throw new Error(data.error || "Import failed");
-
+    const stats = await importCsvFile(file);
     for (const field of fields) $(field).value = "";
     state.page = 1;
     await loadMeta();
     await loadRecords();
     showImportResult(
-      `Imported ${formatNumber(data.stats.rowsInDatabase)} rows from ${formatNumber(data.stats.csvRowsRead)} CSV rows.`
+      `Imported ${formatNumber(stats.rowsInDatabase)} rows from ${formatNumber(stats.csvRowsRead)} CSV rows.`
     );
   } catch (error) {
     setStatus("Error");

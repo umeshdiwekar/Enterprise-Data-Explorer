@@ -2,7 +2,7 @@
   "name": "enterprise-data-explorer",
   "version": "1.0.0",
   "private": true,
-  "description": "Fast local CSV data explorer with SQLite-backed server-side filtering and pagination.",
+  "description": "Fast CSV data explorer with Vercel API routes, Supabase Postgres, and a local SQLite fallback.",
   "scripts": {
     "import-data": "python3 scripts/import_data.py indore.csv data/enterprise.db",
     "dev": "python3 scripts/server.py --db data/enterprise.db --host 127.0.0.1 --port 3000"

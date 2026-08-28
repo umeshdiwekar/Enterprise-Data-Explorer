@@ -57,6 +57,15 @@ function showImportResult(message, isError = false) {
   importResultEl.textContent = message;
 }
 
+async function readJson(response) {
+  const contentType = response.headers.get("content-type") || "";
+  if (contentType.includes("application/json")) {
+    return response.json();
+  }
+  const text = await response.text();
+  throw new Error(text.trim() || `Request failed with status ${response.status}`);
+}
+
 function formatNumber(value) {
   return new Intl.NumberFormat("en-IN").format(value || 0);
 }
@@ -122,8 +131,8 @@ async function loadRecords() {
     const response = await fetch(`/api/records?${paramsForRecords()}`, {
       signal: state.abort.signal,
     });
-    if (!response.ok) throw new Error("Unable to load records");
-    const data = await response.json();
+    const data = await readJson(response);
+    if (!response.ok) throw new Error(data.error || "Unable to load records");
     state.total = data.total;
     state.pages = data.pages;
     state.page = data.page;
@@ -148,7 +157,7 @@ async function loadMeta() {
   if ($("state").value) params.set("state", $("state").value);
   const response = await fetch(`/api/meta?${params}`);
   if (!response.ok) return;
-  const data = await response.json();
+  const data = await readJson(response);
   $("recordCount").textContent = formatNumber(data.total);
   populateSelect($("state"), data.states, "All states", $("state").value);
   populateSelect($("district"), data.districts, "All districts", $("district").value);
@@ -164,7 +173,7 @@ function populateSelect(select, values, label, current) {
 async function openDetail(id) {
   const response = await fetch(`/api/records/${id}`);
   if (!response.ok) return;
-  const { record } = await response.json();
+  const { record } = await readJson(response);
   $("detail").innerHTML = `
     <h2>${escapeHtml(record.enterprise_name || "Enterprise detail")}</h2>
     <div class="detail-grid">
@@ -226,7 +235,7 @@ $("uploadForm").addEventListener("submit", async (event) => {
       method: "POST",
       body,
     });
-    const data = await response.json();
+    const data = await readJson(response);
     if (!response.ok) throw new Error(data.error || "Import failed");
 
     for (const field of fields) $(field).value = "";

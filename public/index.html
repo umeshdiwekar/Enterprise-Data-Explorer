@@ -29,36 +29,12 @@
 
       <section class="filters" aria-label="Filters">
         <label class="wide">
-          <span>Global Search</span>
-          <input id="q" type="search" placeholder="Search enterprise, address, activity..." autocomplete="off" />
+          <span>Enterprise Name</span>
+          <input id="enterprise_name" type="search" placeholder="Filter by enterprise name" autocomplete="off" />
         </label>
-        <label>
-          <span>State</span>
-          <select id="state"><option value="">All states</option></select>
-        </label>
-        <label>
-          <span>District</span>
-          <select id="district"><option value="">All districts</option></select>
-        </label>
-        <label>
-          <span>Pincode</span>
-          <input id="pincode" inputmode="numeric" placeholder="Pincode" />
-        </label>
-        <label>
-          <span>From Date</span>
-          <input id="date_from" type="date" />
-        </label>
-        <label>
-          <span>To Date</span>
-          <input id="date_to" type="date" />
-        </label>
-        <label>
-          <span>LG State Code</span>
-          <input id="lg_st_code" placeholder="Code" />
-        </label>
-        <label>
-          <span>LG District Code</span>
-          <input id="lg_dt_code" placeholder="Code" />
+        <label class="wide">
+          <span>Activities</span>
+          <input id="activities" type="search" placeholder="Filter by activities" autocomplete="off" />
         </label>
         <div class="actions">
           <button id="apply" type="button">Apply Filters</button>
@@ -82,14 +58,9 @@
           <table>
             <thead>
               <tr>
-                <th data-sort="lg_st_code">LG ST Code</th>
                 <th data-sort="state">State</th>
-                <th data-sort="lg_dt_code">LG DT Code</th>
                 <th data-sort="district">District</th>
-                <th data-sort="pincode">Pincode</th>
-                <th data-sort="registration_date">Registration Date</th>
                 <th data-sort="enterprise_name">Enterprise Name</th>
-                <th>Communication Address</th>
                 <th>Activities</th>
               </tr>
             </thead>

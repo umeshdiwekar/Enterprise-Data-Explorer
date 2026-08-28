@@ -24,6 +24,7 @@ SORT_COLUMNS = {
     "pincode",
     "registration_date",
     "enterprise_name",
+    "activities",
 }
 
 
@@ -96,6 +97,17 @@ class ExplorerHandler(SimpleHTTPRequestHandler):
         params = []
         search = get_first(query, "q")
         use_fts = False
+
+        text_filters = {
+            "enterprise_name": "e.enterprise_name",
+            "activities": "e.activities",
+        }
+
+        for key, column in text_filters.items():
+            value = get_first(query, key)
+            if value:
+                where.append(f"{column} LIKE ?")
+                params.append(like(value))
 
         if search:
             try:

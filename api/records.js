@@ -8,11 +8,20 @@ const SORT_COLUMNS = new Set([
   "pincode",
   "registration_date",
   "enterprise_name",
+  "activities",
 ]);
 
 function addEq(params, query, key, column = key) {
   const value = getString(query[key]);
   if (value) params.set(column, `eq.${value}`);
+}
+
+function addLikeFilter(params, query, key, column = key) {
+  const value = getString(query[key]);
+  if (!value) return;
+  const escaped = value.replace(/[\\*()%_]/g, " ").trim();
+  if (!escaped) return;
+  params.set(column, `ilike.*${escaped}*`);
 }
 
 module.exports = async function handler(req, res) {
@@ -43,6 +52,9 @@ module.exports = async function handler(req, res) {
     addEq(params, req.query, "pincode");
     addEq(params, req.query, "lg_st_code");
     addEq(params, req.query, "lg_dt_code");
+
+    addLikeFilter(params, req.query, "enterprise_name");
+    addLikeFilter(params, req.query, "activities");
 
     const dateFrom = getString(req.query.date_from);
     const dateTo = getString(req.query.date_to);

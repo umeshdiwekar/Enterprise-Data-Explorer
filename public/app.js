@@ -9,14 +9,8 @@ const state = {
 };
 
 const fields = [
-  "q",
-  "state",
-  "district",
-  "pincode",
-  "date_from",
-  "date_to",
-  "lg_st_code",
-  "lg_dt_code",
+  "enterprise_name",
+  "activities",
 ];
 
 const csvColumns = [
@@ -135,6 +129,13 @@ function escapeHtml(value) {
 function cell(value, className = "") {
   const text = escapeHtml(value || "");
   return `<td title="${text}"><div class="${className}">${text}</div></td>`;
+}
+
+function stateCell(value) {
+  const text = escapeHtml(value || "");
+  if (!text) return `<td title=""><div></div></td>`;
+  const href = `https://www.google.com/search?q=${encodeURIComponent(value)}`;
+  return `<td title="${text}"><div><a href="${href}" target="_blank" rel="noopener noreferrer">${text}</a></div></td>`;
 }
 
 function normalizeCsvRow(row, sourceRow) {
@@ -307,9 +308,17 @@ async function importCsvFile(file) {
   await flushBatch();
 
   let rowsImportedThisRound = 0;
+  let rowsFinalized = 0;
+  const totalRowsToFinalize = Math.max(1, sourceRow);
+
   do {
     const completed = await postJson("/api/import-complete", { batch_size: 5000 });
     rowsImportedThisRound = Number(completed.rowsImported || 0);
+    rowsFinalized += rowsImportedThisRound;
+    const percent = Math.min(100, Math.round((rowsFinalized / totalRowsToFinalize) * 100));
+    showImportResult(
+      `${file.name}: Processing final merge... ${formatNumber(rowsFinalized)}/${formatNumber(totalRowsToFinalize)} rows (${percent}%)`
+    );
   } while (rowsImportedThisRound >= 5000);
 
   return {
@@ -322,7 +331,7 @@ async function importCsvFile(file) {
 
 function renderSkeleton() {
   rowsEl.innerHTML = Array.from({ length: 12 }, () => {
-    const cells = Array.from({ length: 9 }, () => "<td><span></span></td>").join("");
+    const cells = Array.from({ length: 4 }, () => "<td><span></span></td>").join("");
     return `<tr class="skeleton">${cells}</tr>`;
   }).join("");
 }
@@ -330,14 +339,9 @@ function renderSkeleton() {
 function renderRows(rows) {
   rowsEl.innerHTML = rows.map((row) => `
     <tr data-id="${row.id}">
-      ${cell(row.lg_st_code)}
-      ${cell(row.state)}
-      ${cell(row.lg_dt_code)}
+      ${stateCell(row.state)}
       ${cell(row.district)}
-      ${cell(row.pincode)}
-      ${cell(formatDate(row.registration_date))}
       ${cell(row.enterprise_name, "truncate")}
-      ${cell(row.communication_address, "truncate")}
       ${cell(row.activities, "truncate")}
     </tr>
   `).join("");
@@ -384,21 +388,10 @@ async function loadRecords() {
 }
 
 async function loadMeta() {
-  const params = new URLSearchParams();
-  if ($("state").value) params.set("state", $("state").value);
-  const response = await fetch(`/api/meta?${params}`);
+  const response = await fetch("/api/meta");
   if (!response.ok) return;
   const data = await readJson(response);
   $("recordCount").textContent = formatNumber(data.total);
-  populateSelect($("state"), data.states, "All states", $("state").value);
-  populateSelect($("district"), data.districts, "All districts", $("district").value);
-}
-
-function populateSelect(select, values, label, current) {
-  select.innerHTML = `<option value="">${label}</option>` + values
-    .map((value) => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`)
-    .join("");
-  select.value = current;
 }
 
 async function openDetail(id) {
@@ -436,7 +429,8 @@ for (const field of fields) {
   });
 }
 
-$("q").addEventListener("input", debouncedSearch);
+$("enterprise_name").addEventListener("input", debouncedSearch);
+$("activities").addEventListener("input", debouncedSearch);
 $("apply").addEventListener("click", () => {
   state.page = 1;
   loadRecords();
@@ -475,10 +469,6 @@ $("uploadForm").addEventListener("submit", async (event) => {
     $("uploadButton").disabled = false;
     $("csvFile").value = "";
   }
-});
-$("state").addEventListener("change", async () => {
-  $("district").value = "";
-  await loadMeta();
 });
 $("perPage").addEventListener("change", () => {
   state.perPage = Number($("perPage").value);

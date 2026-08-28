@@ -72,6 +72,7 @@ language sql
 security definer
 set search_path = public
 as $$
+  truncate table public.enterprises restart identity;
   truncate table public.enterprise_import_rows;
   insert into public.enterprise_import_state (name, value)
   values ('enterprise_import_active', 'true')
@@ -147,7 +148,8 @@ begin
     enterprise_name,
     communication_address,
     activities
-  from batch;
+  from batch
+  where source_row not in (select source_row from public.enterprises);
 
   get diagnostics processed_count = row_count;
 

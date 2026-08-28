@@ -26,6 +26,11 @@ create table if not exists public.enterprise_import_rows (
   activities text
 );
 
+create table if not exists public.enterprise_import_state (
+  name text primary key,
+  value text not null default 'idle'
+);
+
 create unique index if not exists enterprises_source_row_key
   on public.enterprises (source_row);
 
@@ -68,120 +73,125 @@ security definer
 set search_path = public
 as $$
   truncate table public.enterprise_import_rows;
+  insert into public.enterprise_import_state (name, value)
+  values ('enterprise_import_active', 'true')
+  on conflict (name) do update set value = 'true';
 $$;
 
-create or replace function public.complete_enterprise_import()
+create or replace function public.complete_enterprise_import(batch_size integer default 5000)
 returns bigint
 language plpgsql
 security definer
 set search_path = public
 as $$
 declare
-  imported_count bigint := 0;
-  batch_count bigint;
-  batch_size constant integer := 5000;
+  processed_count bigint := 0;
+  current_batch_size integer := coalesce(batch_size, 5000);
+  has_active_import boolean;
 begin
-  -- Large CSV imports can exceed the default Postgres statement timeout when we
-  -- do a single truncate + insert from the staging table to the main table.
+  if current_batch_size <= 0 then
+    current_batch_size := 5000;
+  end if;
+
   set local statement_timeout = '10min';
   set local lock_timeout = '30s';
 
-  -- Drop heavy indexes before the bulk load and recreate them after the final
-  -- insert. This avoids paying the cost of index maintenance during the import.
-  drop index if exists public.enterprises_source_row_key;
-  drop index if exists public.enterprises_state_idx;
-  drop index if exists public.enterprises_district_idx;
-  drop index if exists public.enterprises_pincode_idx;
-  drop index if exists public.enterprises_registration_date_idx;
-  drop index if exists public.enterprises_lg_st_code_idx;
-  drop index if exists public.enterprises_lg_dt_code_idx;
-  drop index if exists public.enterprises_state_district_idx;
-  drop index if exists public.enterprises_enterprise_name_trgm_idx;
-  drop index if exists public.enterprises_address_trgm_idx;
-  drop index if exists public.enterprises_activities_trgm_idx;
+  select exists (
+    select 1
+    from public.enterprise_import_state
+    where name = 'enterprise_import_active' and value = 'true'
+  ) into has_active_import;
 
-  truncate table public.enterprises restart identity;
+  if not has_active_import then
+    truncate table public.enterprises restart identity;
+    insert into public.enterprise_import_state (name, value)
+    values ('enterprise_import_active', 'true')
+    on conflict (name) do update set value = 'true';
+  end if;
 
-  loop
-    with batch as (
-      select source_row,
-             lg_st_code,
-             state,
-             lg_dt_code,
-             district,
-             pincode,
-             registration_date,
-             enterprise_name,
-             communication_address,
-             activities
-      from public.enterprise_import_rows
-      order by source_row
-      limit batch_size
-    )
-    insert into public.enterprises (
-      source_row,
-      lg_st_code,
-      state,
-      lg_dt_code,
-      district,
-      pincode,
-      registration_date,
-      enterprise_name,
-      communication_address,
-      activities
-    )
-    select
-      source_row,
-      lg_st_code,
-      state,
-      lg_dt_code,
-      district,
-      pincode,
-      registration_date,
-      enterprise_name,
-      communication_address,
-      activities
-    from batch;
+  with batch as (
+    select source_row,
+           lg_st_code,
+           state,
+           lg_dt_code,
+           district,
+           pincode,
+           registration_date,
+           enterprise_name,
+           communication_address,
+           activities
+    from public.enterprise_import_rows
+    order by source_row
+    limit current_batch_size
+  )
+  insert into public.enterprises (
+    source_row,
+    lg_st_code,
+    state,
+    lg_dt_code,
+    district,
+    pincode,
+    registration_date,
+    enterprise_name,
+    communication_address,
+    activities
+  )
+  select
+    source_row,
+    lg_st_code,
+    state,
+    lg_dt_code,
+    district,
+    pincode,
+    registration_date,
+    enterprise_name,
+    communication_address,
+    activities
+  from batch;
 
-    get diagnostics batch_count = row_count;
-    exit when batch_count = 0;
+  get diagnostics processed_count = row_count;
 
-    imported_count := imported_count + batch_count;
+  delete from public.enterprise_import_rows
+  where source_row in (
+    select source_row
+    from public.enterprise_import_rows
+    order by source_row
+    limit current_batch_size
+  );
 
-    delete from public.enterprise_import_rows
-    where source_row in (
-      select source_row
-      from public.enterprise_import_rows
-      order by source_row
-      limit batch_size
-    );
-  end loop;
+  if (select count(*) from public.enterprise_import_rows) = 0 then
+    insert into public.enterprise_import_state (name, value)
+    values ('enterprise_import_active', 'false')
+    on conflict (name) do update set value = 'false';
+  end if;
 
-  create unique index if not exists enterprises_source_row_key
-    on public.enterprises (source_row);
-  create index if not exists enterprises_state_idx
-    on public.enterprises (state);
-  create index if not exists enterprises_district_idx
-    on public.enterprises (district);
-  create index if not exists enterprises_pincode_idx
-    on public.enterprises (pincode);
-  create index if not exists enterprises_registration_date_idx
-    on public.enterprises (registration_date);
-  create index if not exists enterprises_lg_st_code_idx
-    on public.enterprises (lg_st_code);
-  create index if not exists enterprises_lg_dt_code_idx
-    on public.enterprises (lg_dt_code);
-  create index if not exists enterprises_state_district_idx
-    on public.enterprises (state, district);
+  if processed_count > 0 then
+    create unique index if not exists enterprises_source_row_key
+      on public.enterprises (source_row);
+    create index if not exists enterprises_state_idx
+      on public.enterprises (state);
+    create index if not exists enterprises_district_idx
+      on public.enterprises (district);
+    create index if not exists enterprises_pincode_idx
+      on public.enterprises (pincode);
+    create index if not exists enterprises_registration_date_idx
+      on public.enterprises (registration_date);
+    create index if not exists enterprises_lg_st_code_idx
+      on public.enterprises (lg_st_code);
+    create index if not exists enterprises_lg_dt_code_idx
+      on public.enterprises (lg_dt_code);
+    create index if not exists enterprises_state_district_idx
+      on public.enterprises (state, district);
 
-  create index if not exists enterprises_enterprise_name_trgm_idx
-    on public.enterprises using gin (enterprise_name gin_trgm_ops);
-  create index if not exists enterprises_address_trgm_idx
-    on public.enterprises using gin (communication_address gin_trgm_ops);
-  create index if not exists enterprises_activities_trgm_idx
-    on public.enterprises using gin (activities gin_trgm_ops);
+    create index if not exists enterprises_enterprise_name_trgm_idx
+      on public.enterprises using gin (enterprise_name gin_trgm_ops);
+    create index if not exists enterprises_address_trgm_idx
+      on public.enterprises using gin (communication_address gin_trgm_ops);
+    create index if not exists enterprises_activities_trgm_idx
+      on public.enterprises using gin (activities gin_trgm_ops);
+  end if;
 
-  return imported_count;
+  return processed_count;
 end;
 $$;
 

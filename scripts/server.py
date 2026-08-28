@@ -28,7 +28,13 @@ SORT_COLUMNS = {
 
 
 def json_response(handler, status, payload):
-    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    if isinstance(payload, str):
+        body = payload.encode("utf-8")
+    elif isinstance(payload, (bytes, bytearray)):
+        body = bytes(payload)
+    else:
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+
     handler.send_response(status)
     handler.send_header("Content-Type", "application/json; charset=utf-8")
     handler.send_header("Cache-Control", "no-store")

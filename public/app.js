@@ -305,11 +305,16 @@ async function importCsvFile(file) {
 
   if (field || row.length) await pushFieldAndRow();
   await flushBatch();
-  const completed = await postJson("/api/import-complete", {});
+
+  let rowsImportedThisRound = 0;
+  do {
+    const completed = await postJson("/api/import-complete", { batch_size: 5000 });
+    rowsImportedThisRound = Number(completed.rowsImported || 0);
+  } while (rowsImportedThisRound >= 5000);
 
   return {
     csvRowsRead: sourceRow,
-    rowsInDatabase: completed.rowsInDatabase,
+    rowsInDatabase: sourceRow,
     unparsedRegistrationDates: unparsedDates,
     estimatedRows,
   };

@@ -310,16 +310,17 @@ async function importCsvFile(file) {
   let rowsImportedThisRound = 0;
   let rowsFinalized = 0;
   const totalRowsToFinalize = Math.max(1, sourceRow);
+  const finalBatchSize = 1000;
 
   do {
-    const completed = await postJson("/api/import-complete", { batch_size: 5000 });
+    const completed = await postJson("/api/import-complete", { batch_size: finalBatchSize });
     rowsImportedThisRound = Number(completed.rowsImported || 0);
     rowsFinalized += rowsImportedThisRound;
     const percent = Math.min(100, Math.round((rowsFinalized / totalRowsToFinalize) * 100));
     showImportResult(
       `${file.name}: Processing final merge... ${formatNumber(rowsFinalized)}/${formatNumber(totalRowsToFinalize)} rows (${percent}%)`
     );
-  } while (rowsImportedThisRound >= 5000);
+  } while (rowsImportedThisRound >= finalBatchSize);
 
   return {
     csvRowsRead: sourceRow,

@@ -91,10 +91,10 @@ declare
   has_active_import boolean;
 begin
   if current_batch_size <= 0 then
-    current_batch_size := 5000;
+    current_batch_size := 1000;
   end if;
 
-  set local statement_timeout = '10min';
+  set local statement_timeout = '30min';
   set local lock_timeout = '30s';
 
   select exists (
@@ -162,12 +162,6 @@ begin
   );
 
   if (select count(*) from public.enterprise_import_rows) = 0 then
-    insert into public.enterprise_import_state (name, value)
-    values ('enterprise_import_active', 'false')
-    on conflict (name) do update set value = 'false';
-  end if;
-
-  if processed_count > 0 then
     create unique index if not exists enterprises_source_row_key
       on public.enterprises (source_row);
     create index if not exists enterprises_state_idx
@@ -191,6 +185,10 @@ begin
       on public.enterprises using gin (communication_address gin_trgm_ops);
     create index if not exists enterprises_activities_trgm_idx
       on public.enterprises using gin (activities gin_trgm_ops);
+
+    insert into public.enterprise_import_state (name, value)
+    values ('enterprise_import_active', 'false')
+    on conflict (name) do update set value = 'false';
   end if;
 
   return processed_count;

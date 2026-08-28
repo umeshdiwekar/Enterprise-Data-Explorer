@@ -5,13 +5,14 @@ module.exports = async function handler(req, res) {
 
   try {
     const payload = req.body && typeof req.body === "object" ? req.body : {};
-    const batchSize = Number(payload.batch_size || 5000);
+    const requestedBatchSize = Number(payload.batch_size || 1000);
+    const batchSize = Math.min(Math.max(Number.isFinite(requestedBatchSize) ? requestedBatchSize : 1000, 1), 1000);
     const { body } = await supabaseFetch("/rest/v1/rpc/complete_enterprise_import", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ batch_size: Number.isFinite(batchSize) ? batchSize : 5000 }),
+      body: JSON.stringify({ batch_size: batchSize }),
     });
 
     const rowsImported = Number(body || 0);

@@ -79,6 +79,25 @@ as $$
 declare
   imported_count bigint;
 begin
+  -- Large CSV imports can exceed the default Postgres statement timeout when
+  -- we truncate the live table and bulk-insert staged rows in one call.
+  set local statement_timeout = '10min';
+  set local lock_timeout = '30s';
+
+  -- Drop heavy indexes before the bulk load and recreate them after the final
+  -- insert. This avoids paying the cost of index maintenance during the import.
+  drop index if exists public.enterprises_source_row_key;
+  drop index if exists public.enterprises_state_idx;
+  drop index if exists public.enterprises_district_idx;
+  drop index if exists public.enterprises_pincode_idx;
+  drop index if exists public.enterprises_registration_date_idx;
+  drop index if exists public.enterprises_lg_st_code_idx;
+  drop index if exists public.enterprises_lg_dt_code_idx;
+  drop index if exists public.enterprises_state_district_idx;
+  drop index if exists public.enterprises_enterprise_name_trgm_idx;
+  drop index if exists public.enterprises_address_trgm_idx;
+  drop index if exists public.enterprises_activities_trgm_idx;
+
   truncate table public.enterprises restart identity;
 
   insert into public.enterprises (
@@ -108,6 +127,31 @@ begin
   order by source_row;
 
   get diagnostics imported_count = row_count;
+
+  create unique index if not exists enterprises_source_row_key
+    on public.enterprises (source_row);
+  create index if not exists enterprises_state_idx
+    on public.enterprises (state);
+  create index if not exists enterprises_district_idx
+    on public.enterprises (district);
+  create index if not exists enterprises_pincode_idx
+    on public.enterprises (pincode);
+  create index if not exists enterprises_registration_date_idx
+    on public.enterprises (registration_date);
+  create index if not exists enterprises_lg_st_code_idx
+    on public.enterprises (lg_st_code);
+  create index if not exists enterprises_lg_dt_code_idx
+    on public.enterprises (lg_dt_code);
+  create index if not exists enterprises_state_district_idx
+    on public.enterprises (state, district);
+
+  create index if not exists enterprises_enterprise_name_trgm_idx
+    on public.enterprises using gin (enterprise_name gin_trgm_ops);
+  create index if not exists enterprises_address_trgm_idx
+    on public.enterprises using gin (communication_address gin_trgm_ops);
+  create index if not exists enterprises_activities_trgm_idx
+    on public.enterprises using gin (activities gin_trgm_ops);
+
   truncate table public.enterprise_import_rows;
   return imported_count;
 end;

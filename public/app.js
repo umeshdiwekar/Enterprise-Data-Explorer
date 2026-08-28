@@ -31,7 +31,8 @@ const csvColumns = [
   "Activities",
 ];
 
-const importBatchSize = 250;
+const importBatchSize = 1000;
+const MAX_TEST_ROWS = 1000;
 
 const $ = (id) => document.getElementById(id);
 const rowsEl = $("rows");
@@ -237,6 +238,10 @@ async function importCsvFile(file) {
   let unparsedDates = 0;
   let batch = [];
 
+  if (estimatedRows > MAX_TEST_ROWS) {
+    throw new Error(`Test mode enabled: only ${MAX_TEST_ROWS} rows are allowed per import.`);
+  }
+
   async function flushBatch() {
     if (!batch.length) return;
     const data = await postJson("/api/import-batch", { rows: batch });
@@ -253,6 +258,9 @@ async function importCsvFile(file) {
       return;
     }
     sourceRow += 1;
+    if (sourceRow > MAX_TEST_ROWS) {
+      throw new Error(`Test mode enabled: only ${MAX_TEST_ROWS} rows are allowed per import.`);
+    }
     const normalized = normalizeCsvRow(rawRow, sourceRow);
     if (rawRow[5] && !normalized.registration_date) unparsedDates += 1;
     batch.push(normalized);

@@ -175,7 +175,54 @@ async function postJson(url, payload) {
   return data;
 }
 
+async function estimateCsvRows(file) {
+  const decoder = new TextDecoder();
+  const reader = file.stream().getReader();
+  let rows = 0;
+  let inQuotes = false;
+  let pendingQuote = false;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    const chunk = decoder.decode(value || new Uint8Array(), { stream: !done });
+    for (let index = 0; index < chunk.length; index += 1) {
+      const char = chunk[index];
+      const next = chunk[index + 1];
+      if (pendingQuote) {
+        pendingQuote = false;
+        if (char === '"') continue;
+        inQuotes = false;
+      }
+      if (char === '"') {
+        if (inQuotes && next === '"') {
+          index += 1;
+        } else if (inQuotes && index === chunk.length - 1 && !done) {
+          pendingQuote = true;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if ((char === "\n" || char === "\r") && !inQuotes) {
+        if (char === "\r" && next === "\n") index += 1;
+        rows += 1;
+      }
+    }
+    if (done) break;
+  }
+
+  return Math.max(0, rows - 1);
+}
+
+function showImportProgress(importedRows, totalRows, fileName) {
+  const remainingRows = Math.max(0, totalRows - importedRows);
+  const percent = totalRows ? Math.min(100, Math.round((importedRows / totalRows) * 100)) : 0;
+  showImportResult(
+    `${fileName}: ${formatNumber(importedRows)} imported, ${formatNumber(remainingRows)} left (${percent}%).`
+  );
+}
+
 async function importCsvFile(file) {
+  showImportResult(`Counting rows in ${file.name}.`);
+  const estimatedRows = await estimateCsvRows(file);
   await postJson("/api/import", {});
 
   const decoder = new TextDecoder();
@@ -194,7 +241,7 @@ async function importCsvFile(file) {
     if (!batch.length) return;
     const data = await postJson("/api/import-batch", { rows: batch });
     uploadedRows += data.inserted || batch.length;
-    showImportResult(`Imported ${formatNumber(uploadedRows)} rows from ${file.name}.`);
+    showImportProgress(uploadedRows, estimatedRows || sourceRow, file.name);
     batch = [];
   }
 
@@ -264,6 +311,7 @@ async function importCsvFile(file) {
     csvRowsRead: sourceRow,
     rowsInDatabase: completed.rowsInDatabase,
     unparsedRegistrationDates: unparsedDates,
+    estimatedRows,
   };
 }
 

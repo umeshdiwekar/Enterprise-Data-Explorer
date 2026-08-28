@@ -237,16 +237,13 @@ async function importCsvFile(file) {
   let uploadedRows = 0;
   let unparsedDates = 0;
   let batch = [];
-
-  if (estimatedRows > MAX_TEST_ROWS) {
-    throw new Error(`Test mode enabled: only ${MAX_TEST_ROWS} rows are allowed per import.`);
-  }
+  const maxRowsToImport = Math.min(estimatedRows, MAX_TEST_ROWS);
 
   async function flushBatch() {
     if (!batch.length) return;
     const data = await postJson("/api/import-batch", { rows: batch });
     uploadedRows += data.inserted || batch.length;
-    showImportProgress(uploadedRows, estimatedRows || sourceRow, file.name);
+    showImportProgress(uploadedRows, maxRowsToImport || sourceRow, file.name);
     batch = [];
   }
 
@@ -257,10 +254,10 @@ async function importCsvFile(file) {
       headerRead = true;
       return;
     }
-    sourceRow += 1;
-    if (sourceRow > MAX_TEST_ROWS) {
-      throw new Error(`Test mode enabled: only ${MAX_TEST_ROWS} rows are allowed per import.`);
+    if (sourceRow >= MAX_TEST_ROWS) {
+      return;
     }
+    sourceRow += 1;
     const normalized = normalizeCsvRow(rawRow, sourceRow);
     if (rawRow[5] && !normalized.registration_date) unparsedDates += 1;
     batch.push(normalized);
@@ -319,7 +316,7 @@ async function importCsvFile(file) {
     csvRowsRead: sourceRow,
     rowsInDatabase: completed.rowsInDatabase,
     unparsedRegistrationDates: unparsedDates,
-    estimatedRows,
+    estimatedRows: maxRowsToImport,
   };
 }
 
